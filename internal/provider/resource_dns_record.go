@@ -124,7 +124,10 @@ func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.Creat
 
 	id, err := r.provider.client.CreateRecord(ctx, data.Domain.Value, record)
 	if err != nil {
-		panic(err)
+		resp.Diagnostics.AddError(
+			"Error creating DNS Record",
+			fmt.Sprintf("Error: %s", err),
+		)
 	}
 
 	data.Id = types.String{Value: fmt.Sprint(id)}
@@ -215,26 +218,41 @@ func (r porkbunDnsRecordResource) Update(ctx context.Context, req resource.Updat
 	}
 
 	diags = resp.State.Set(ctx, &data)
+	resp.State.SetAttribute(ctx, path.Root("id"), &recordId)
 	resp.Diagnostics.Append(diags...)
 }
 
 func (r porkbunDnsRecordResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var state porkbunDnsRecordResourceData
+
 	//var data exampleResourceData
 
-	//diags := req.State.Get(ctx, &data)
-	//resp.Diagnostics.Append(diags...)
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
 
-	//if resp.Diagnostics.HasError() {
-	//	return
-	//}
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	// If applicable, this is a great opportunity to initialize any necessary
-	// provider client data and make a call using it.
-	// example, err := d.provider.client.DeleteExample(...)
-	// if err != nil {
-	//     resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete example, got error: %s", err))
-	//     return
-	// }
+	intId, err := strconv.Atoi(state.Id.Value)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error converting ID to a string",
+			fmt.Sprintf("Error: %s", err),
+		)
+	}
+
+	err = r.provider.client.DeleteRecord(ctx, state.Domain.Value, intId)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error deleting record",
+			fmt.Sprintf("Error: %s", err),
+		)
+	}
+
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 func (r porkbunDnsRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
