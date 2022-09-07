@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -25,6 +26,7 @@ type porkbunProvider struct {
 type providerData struct {
 	ApiKey    types.String `tfsdk:"api_key"`
 	SecretKey types.String `tfsdk:"secret_key"`
+	BaseUrl   types.String `tfsdk:"base_url"`
 }
 
 func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
@@ -41,7 +43,7 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		// Cannot connect to client with an unknown value
 		resp.Diagnostics.AddWarning(
 			"Unable to create client",
-			"Cannot use unknown value as username",
+			"Cannot use unknown value as api_key",
 		)
 		return
 	}
@@ -55,8 +57,8 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 	if apiKey == "" {
 		// Error vs warning - empty value must stop execution
 		resp.Diagnostics.AddError(
-			"Unable to find username",
-			"Username cannot be an empty string",
+			"Unable to find api_key",
+			"api_key cannot be an empty string",
 		)
 		return
 	}
@@ -66,7 +68,7 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		// Cannot connect to client with an unknown value
 		resp.Diagnostics.AddWarning(
 			"Unable to create client",
-			"Cannot use unknown value as username",
+			"Cannot use unknown value as secret_key",
 		)
 		return
 	}
@@ -80,22 +82,19 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 	if secretKey == "" {
 		// Error vs warning - empty value must stop execution
 		resp.Diagnostics.AddError(
-			"Unable to find username",
-			"Username cannot be an empty string",
+			"Unable to find secret_key",
+			"secret_key cannot be an empty string",
 		)
 		return
 	}
 
 	c := porkbun.New(secretKey, apiKey)
 
+	if baseUrl, ok := os.LookupEnv("PORKBUN_BASE_URL"); ok {
+		c.BaseURL, _ = url.Parse(baseUrl)
+	}
+
 	p.client = c
-
-	// Configuration values are now available.
-	// if data.Example.Null { /* ... */ }
-
-	// If the upstream provider SDK or HTTP client requires configuration, such
-	// as authentication or logging, this is a great opportunity to do so.
-
 	p.configured = true
 }
 
@@ -106,9 +105,7 @@ func (p *porkbunProvider) GetResources(ctx context.Context) (map[string]provider
 }
 
 func (p *porkbunProvider) GetDataSources(ctx context.Context) (map[string]provider.DataSourceType, diag.Diagnostics) {
-	return map[string]provider.DataSourceType{
-		//		"scaffolding_example": exampleDataSourceType{},
-	}, nil
+	return map[string]provider.DataSourceType{}, nil
 }
 
 func (p *porkbunProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
@@ -126,6 +123,12 @@ func (p *porkbunProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Dia
 				Optional:            true,
 				Type:                types.StringType,
 			},
+			"base_url": {
+				MarkdownDescription: "Override Porkbun Base URL",
+				Required:            false,
+				Optional:            true,
+				Type:                types.StringType,
+			},
 		},
 	}, nil
 }
@@ -138,11 +141,6 @@ func New(version string) func() provider.Provider {
 	}
 }
 
-// convertProviderType is a helper function for NewResource and NewDataSource
-// implementations to associate the concrete provider type. Alternatively,
-// this helper can be skipped and the provider type can be directly type
-// asserted (e.g. provider: in.(*scaffoldingProvider)), however using this can prevent
-// potential panics.
 func convertProviderType(in provider.Provider) (porkbunProvider, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
