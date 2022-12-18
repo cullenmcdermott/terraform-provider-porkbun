@@ -155,12 +155,15 @@ func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadReq
 		tflog.Info(ctx, fmt.Sprintf("This record is: %s", record.ID))
 		if record.ID == data.Id.Value {
 			data.Content.Value = record.Content
-			// The API returns the full record as the name so we'll strip off the domain at the end to keep it consistent
+
+			// This is to handle if there's no subdomain
 			if data.Domain.Value == record.Name {
 				data.Name.Value = ""
 			} else {
+				// The API returns the full record as the name so we'll strip off the domain at the end to keep it consistent
 				data.Name.Value = strings.ReplaceAll(record.Name, fmt.Sprintf(".%s", data.Domain.Value), "")
 			}
+
 			data.Notes.Value = record.Notes
 			data.Ttl.Value = record.TTL
 			data.Type.Value = record.Type
