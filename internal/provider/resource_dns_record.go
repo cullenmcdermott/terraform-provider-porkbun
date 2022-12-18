@@ -86,10 +86,7 @@ func (t porkbunDnsRecordResourceType) NewResource(ctx context.Context, in provid
 }
 
 type porkbunDnsRecordResourceData struct {
-	Id types.String `tfsdk:"id"`
-	//Status types.String `tfsdk:"status,omitempty"`
-	//SecretApiKey types.String `tfsdk:"secretapikey"`
-	//ApiKey       types.String `tfsdk:"apikey"`
+	Id      types.String `tfsdk:"id"`
 	Name    types.String `tfsdk:"name"`
 	Type    types.String `tfsdk:"type"`
 	Content types.String `tfsdk:"content"`
@@ -132,10 +129,6 @@ func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.Creat
 
 	data.Id = types.String{Value: fmt.Sprint(id)}
 
-	// Write logs using the tflog package
-	// Documentation: https://terraform.io/plugin/log
-	tflog.Trace(ctx, "created a resource")
-
 	diags = resp.State.Set(ctx, &data)
 	resp.Diagnostics.Append(diags...)
 }
@@ -145,8 +138,6 @@ func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadReq
 
 	diags := req.State.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
-
-	tflog.Info(ctx, fmt.Sprintf("Id from refresh: %s", data.Id))
 
 	if resp.Diagnostics.HasError() {
 		return
@@ -165,7 +156,11 @@ func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadReq
 		if record.ID == data.Id.Value {
 			data.Content.Value = record.Content
 			// The API returns the full record as the name so we'll strip off the domain at the end to keep it consistent
-			data.Name.Value = strings.ReplaceAll(record.Name, fmt.Sprintf(".%s", data.Domain.Value), "")
+			if data.Domain.Value == record.Name {
+				data.Name.Value = ""
+			} else {
+				data.Name.Value = strings.ReplaceAll(record.Name, fmt.Sprintf(".%s", data.Domain.Value), "")
+			}
 			data.Notes.Value = record.Notes
 			data.Ttl.Value = record.TTL
 			data.Type.Value = record.Type
