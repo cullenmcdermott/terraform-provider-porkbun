@@ -2,7 +2,10 @@ module github.com/cullenmcdermott/terraform-provider-porkbun
 
 go 1.18
 
+replace github.com/nrdcg/porkbun => /home/cullen/git/porkbun
+
 require (
+	github.com/hashicorp/errwrap v1.1.0
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
 	github.com/hashicorp/terraform-plugin-framework v0.11.1
 	github.com/hashicorp/terraform-plugin-go v0.14.0
@@ -25,7 +28,6 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-checkpoint v0.5.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-cty v1.4.1-0.20200414143053-d3edf31b6320 // indirect
