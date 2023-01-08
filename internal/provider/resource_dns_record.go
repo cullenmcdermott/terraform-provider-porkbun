@@ -4,10 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -16,12 +12,20 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/nrdcg/porkbun"
+	"golang.org/x/exp/slices"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
 var _ provider.ResourceType = porkbunDnsRecordResourceType{}
 var _ resource.Resource = porkbunDnsRecordResource{}
 var _ resource.ResourceWithImportState = porkbunDnsRecordResource{}
+
+// The API returns a string of "SUCCESS" or "ERROR" except for when we're rate limited
+// We get a 503 and the go library expects a string so we need to treat this as a string for now
+var retryableCodes = []string{"503"}
 
 var (
 	err503   = errors.New("503")
@@ -217,8 +221,7 @@ func (r porkbunDnsRecordResource) Update(ctx context.Context, req resource.Updat
 		)
 	}
 
-	_, err = retry(attempts, sleep, func() (int, error) { return r.provider.client.EditRecord(ctx, data.Domain.Value, intId, record) })
-	//err = r.provider.client.EditRecord(ctx, data.Domain.Value, intId, record)
+	err = retrySingleReturn(attempts, sleep, func() error { return r.provider.client.EditRecord(ctx, data.Domain.Value, intId, record) })
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error updating the record",
@@ -253,8 +256,7 @@ func (r porkbunDnsRecordResource) Delete(ctx context.Context, req resource.Delet
 		)
 	}
 
-	_, err = retry(attempts, sleep, func() (int, error) { return r.provider.client.DeleteRecord(ctx, state.Domain.Value, intId) })
-	//err = r.provider.client.DeleteRecord(ctx, state.Domain.Value, intId)
+	err = retrySingleReturn(attempts, sleep, func() error { return r.provider.client.DeleteRecord(ctx, state.Domain.Value, intId) })
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error deleting record",
@@ -271,7 +273,7 @@ func (r porkbunDnsRecordResource) ImportState(ctx context.Context, req resource.
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-// From https://stackoverflow.com/questions/67069723/keep-retrying-a-function-in-golang
+// Originally from https://stackoverflow.com/questions/67069723/keep-retrying-a-function-in-golang
 func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err error) {
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
@@ -283,8 +285,35 @@ func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err e
 		if err == nil {
 			return result, nil
 		}
+		err, ok := err.(porkbun.StatusError)
+		if ok {
+			if !isRetryable(err.Status) {
+				return result, fmt.Errorf("received error is not retryable: %s", err)
+			}
+		}
 	}
 	return result, fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+}
+
+func retrySingleReturn(attempts int, sleep int, f func() error) (err error) {
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			fmt.Println("retrying after error:", err)
+			time.Sleep(time.Duration(sleep) * time.Second)
+			sleep *= 2
+		}
+		err = f()
+		if err == nil {
+			return nil
+		}
+		err, ok := err.(porkbun.StatusError)
+		if ok {
+			if !isRetryable(err.Status) {
+				return fmt.Errorf("received error is not retryable: %s", err)
+			}
+		}
+	}
+	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
 
 func (r porkbunDnsRecordResource) getRecords(ctx context.Context, domain string) ([]porkbun.Record, error) {
@@ -293,4 +322,8 @@ func (r porkbunDnsRecordResource) getRecords(ctx context.Context, domain string)
 		return []porkbun.Record{}, err
 	}
 	return records, nil
+}
+
+func isRetryable(status string) bool {
+	return slices.Contains(retryableCodes, status)
 }

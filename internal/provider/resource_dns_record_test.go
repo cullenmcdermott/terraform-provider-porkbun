@@ -141,6 +141,15 @@ func TestPorkbunDnsRecordSuccess(t *testing.T) {
 			}))
 		})
 
+		expectRequest(func(w http.ResponseWriter, req *http.Request) {
+			r.Equal(http.MethodPost, req.Method)
+			r.Equal("/dns/retrieve/foobar.dev", req.URL.Path)
+			r.NoError(json.NewEncoder(w).Encode(&retrieveResponse{
+				Status:  "SUCCESS",
+				Records: []porkbun.Record{test.record},
+			}))
+		})
+
 		// Run the terraform twice to ensure its idempotent
 		resource.UnitTest(t, resource.TestCase{
 			IsUnitTest: true,
