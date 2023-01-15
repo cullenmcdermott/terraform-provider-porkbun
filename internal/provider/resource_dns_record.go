@@ -28,9 +28,8 @@ var _ resource.ResourceWithImportState = porkbunDnsRecordResource{}
 var retryableCodes = []string{"503"}
 
 var (
-	err503   = errors.New("503")
-	sleep    = 10
-	attempts = 20
+	err503 = errors.New("503")
+	sleep  = 10
 )
 
 type porkbunDnsRecordResourceType struct{}
@@ -114,6 +113,7 @@ type porkbunDnsRecordResource struct {
 
 func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data porkbunDnsRecordResourceData
+	attempts := r.provider.MaxRetries
 
 	diags := req.Config.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -148,6 +148,8 @@ func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.Creat
 
 func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data porkbunDnsRecordResourceData
+	attempts := r.provider.MaxRetries
+	tflog.Info(ctx, fmt.Sprintf("Max Retries set to: %d", r.provider.MaxRetries))
 
 	diags := req.State.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -195,6 +197,7 @@ func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadReq
 func (r porkbunDnsRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data porkbunDnsRecordResourceData
 	var recordId string
+	attempts := r.provider.MaxRetries
 
 	diags := req.Plan.Get(ctx, &data)
 	req.State.GetAttribute(ctx, path.Root("id"), &recordId)
@@ -240,6 +243,7 @@ func (r porkbunDnsRecordResource) Update(ctx context.Context, req resource.Updat
 
 func (r porkbunDnsRecordResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state porkbunDnsRecordResourceData
+	attempts := r.provider.MaxRetries
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
