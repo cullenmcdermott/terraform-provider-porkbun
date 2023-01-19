@@ -8,8 +8,8 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.14.0
 	github.com/hashicorp/terraform-plugin-log v0.7.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
-	github.com/nrdcg/porkbun v0.1.1
-	github.com/stretchr/testify v1.7.2
+	github.com/nrdcg/porkbun v0.2.0
+	github.com/stretchr/testify v1.8.1
 )
 
 require (
