@@ -130,7 +130,6 @@ func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	id, err := retry(attempts, sleep, func() (int, error) { return r.provider.client.CreateRecord(ctx, data.Domain.Value, record) })
-	//id, err := r.provider.client.CreateRecord(ctx, data.Domain.Value, record)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error creating DNS Record",
@@ -286,10 +285,16 @@ func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err e
 		if err == nil {
 			return result, nil
 		}
-		err, ok := err.(porkbun.ServerError)
+		status, ok := err.(porkbun.Status)
 		if ok {
-			if !isRetryable(err.StatusCode) {
-				return result, fmt.Errorf("received error is not retryable: %s", err)
+			if status.Status != "SUCCESS" {
+				return result, fmt.Errorf("cannot be retried: %s", status.Error())
+			}
+		}
+		servererr, ok := err.(porkbun.ServerError)
+		if ok {
+			if !isRetryable(servererr.StatusCode) {
+				return result, fmt.Errorf("received error is not retryable: %s", servererr.Error())
 			}
 		}
 	}

@@ -111,7 +111,7 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 			}
 			p.MaxRetries = mri
 		} else {
-			p.MaxRetries = 15
+			p.MaxRetries = 10
 		}
 	} else {
 		p.MaxRetries = int(data.MaxRetries.Value)

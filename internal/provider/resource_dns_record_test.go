@@ -8,7 +8,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/nrdcg/porkbun"
 	"github.com/stretchr/testify/require"
@@ -41,27 +40,12 @@ type retrieveResponse struct {
 	Records []porkbun.Record
 }
 
-func getProvider(client *porkbun.Client) porkbunProvider {
-	return porkbunProvider{
-		client: client,
-	}
-}
-
-func newPorkbunProvider(testUrl string) provider.Provider {
-	client := porkbun.New("sk1_foobarbaz", "pk1_foobarbaz")
-	client.BaseURL, _ = url.Parse(testUrl)
-	return &porkbunProvider{
-		client:     client,
-		configured: true,
-		version:    "test",
-	}
-}
-
-func TestPorkbunDnsRecordSuccess(t *testing.T) {
+func Test_CreateRecordSuccess(t *testing.T) {
 	testUrl, expectRequest, _ := MockPorkbun(t)
 	os.Setenv("PORKBUN_API_KEY", "pk1_foobarbaz")
 	os.Setenv("PORKBUN_SECRET_KEY", "sk1_foobarbaz")
 	os.Setenv("PORKBUN_BASE_URL", testUrl)
+	os.Setenv("PORKBUN_MAX_RETRIES", "1")
 
 	tests := []struct {
 		name         string
@@ -109,17 +93,10 @@ func TestPorkbunDnsRecordSuccess(t *testing.T) {
 			},
 		},
 	}
-
 	for _, test := range tests {
+
+		t.Log("Running test ", test.name)
 		r := require.New(t)
-		expectRequest(func(w http.ResponseWriter, req *http.Request) {
-			r.Equal(http.MethodPost, req.Method)
-			r.Equal("/dns/retrieve/foobar.dev", req.URL.Path)
-			r.NoError(json.NewEncoder(w).Encode(&retrieveResponse{
-				Status:  "SUCCESS",
-				Records: []porkbun.Record{test.record},
-			}))
-		})
 		expectRequest(func(w http.ResponseWriter, req *http.Request) {
 			r.Equal(http.MethodPost, req.Method)
 			r.Equal("/dns/create/foobar.dev", req.URL.Path)
@@ -148,16 +125,6 @@ func TestPorkbunDnsRecordSuccess(t *testing.T) {
 				Status: "SUCCESS",
 			}))
 		})
-
-		expectRequest(func(w http.ResponseWriter, req *http.Request) {
-			r.Equal(http.MethodPost, req.Method)
-			r.Equal("/dns/retrieve/foobar.dev", req.URL.Path)
-			r.NoError(json.NewEncoder(w).Encode(&retrieveResponse{
-				Status:  "SUCCESS",
-				Records: []porkbun.Record{test.record},
-			}))
-		})
-
 		// Run the terraform twice to ensure its idempotent
 		resource.UnitTest(t, resource.TestCase{
 			IsUnitTest: true,
@@ -166,21 +133,77 @@ func TestPorkbunDnsRecordSuccess(t *testing.T) {
 					ProtoV6ProviderFactories: protoV6ProviderFactories(testUrl),
 					Config:                   test.testResource,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", "0.0.0.1"),
+						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", test.record.Content),
 					),
 				},
 				{
 					ProtoV6ProviderFactories: protoV6ProviderFactories(testUrl),
 					Config:                   test.testResource,
 					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", "0.0.0.1"),
+						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", test.record.Content),
 					),
 				},
 			},
 		})
 	}
-
 }
+
+//func Test_CreateRecordFailure(t *testing.T) {
+//	testUrl, expectRequest, _ := MockPorkbun(t)
+//	os.Setenv("PORKBUN_API_KEY", "pk1_foobarbaz")
+//	os.Setenv("PORKBUN_SECRET_KEY", "sk1_foobarbaz")
+//	os.Setenv("PORKBUN_BASE_URL", testUrl)
+//
+//	tests := []struct {
+//		name         string
+//		testResource string
+//		record       porkbun.Record
+//	}{
+//		{
+//			name: "withSubdomain",
+//			testResource: `
+//          resource "porkbun_dns_record" "test" {
+//            name =   "test"
+//            domain = "foobar.dev"
+//            content = "0.0.0.1"
+//            type = "A"
+//          }
+//				`,
+//			record: porkbun.Record{},
+//		},
+//	}
+//	for _, test := range tests {
+//		r := require.New(t)
+//		expectRequest(func(w http.ResponseWriter, req *http.Request) {
+//			r.Equal(http.MethodPost, req.Method)
+//			r.Equal("/dns/delete/foobar.dev/0", req.URL.Path)
+//			r.Error(json.NewEncoder(w).Encode(&createResponse{
+//				Status: "FAILURE",
+//			}))
+//		})
+//		expectRequest(func(w http.ResponseWriter, req *http.Request) {
+//			r.Equal(http.MethodPost, req.Method)
+//			r.Equal("/dns/delete/foobar.dev/0", req.URL.Path)
+//			r.Error(json.NewEncoder(w).Encode(&createResponse{
+//				Status: "FAILURE",
+//			}))
+//		})
+//		// Run the terraform twice to ensure its idempotent
+//		resource.UnitTest(t, resource.TestCase{
+//			IsUnitTest: true,
+//			Steps: []resource.TestStep{
+//				{
+//					ProtoV6ProviderFactories: protoV6ProviderFactories(testUrl),
+//					Config:                   test.testResource,
+//					Check: resource.ComposeTestCheckFunc(
+//						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", "0.0.0.1"),
+//					),
+//				},
+//			},
+//		})
+//	}
+//
+//}
 
 func MockPorkbun(t *testing.T) (string, func(http.HandlerFunc), func()) {
 	var (
