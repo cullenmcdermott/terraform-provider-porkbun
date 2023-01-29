@@ -8,7 +8,7 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.14.0
 	github.com/hashicorp/terraform-plugin-log v0.7.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
-	github.com/nrdcg/porkbun v0.1.1
+	github.com/nrdcg/porkbun v0.2.0
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/exp v0.0.0-20221230162634-c8adb6e14cba
 )
@@ -73,5 +73,3 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/nrdcg/porkbun v0.1.1 => github.com/cullenmcdermott/porkbun v0.0.0-20230114204042-128c18f69e51

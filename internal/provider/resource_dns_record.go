@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -25,11 +24,10 @@ var _ resource.ResourceWithImportState = porkbunDnsRecordResource{}
 
 // The API returns a string of "SUCCESS" or "ERROR" except for when we're rate limited
 // We get a 503 and the go library expects a string so we need to treat this as a string for now
-var retryableCodes = []string{"503"}
+var retryableCodes = []int{503}
 
 var (
-	err503 = errors.New("503")
-	sleep  = 10
+	sleep = 10
 )
 
 type porkbunDnsRecordResourceType struct{}
@@ -281,7 +279,6 @@ func (r porkbunDnsRecordResource) ImportState(ctx context.Context, req resource.
 func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err error) {
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			fmt.Println("retrying after error:", err)
 			time.Sleep(time.Duration(sleep) * time.Second)
 			sleep *= 2
 		}
@@ -289,9 +286,9 @@ func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err e
 		if err == nil {
 			return result, nil
 		}
-		err, ok := err.(porkbun.StatusError)
+		err, ok := err.(porkbun.ServerError)
 		if ok {
-			if !isRetryable(err.Status) {
+			if !isRetryable(err.StatusCode) {
 				return result, fmt.Errorf("received error is not retryable: %s", err)
 			}
 		}
@@ -302,7 +299,6 @@ func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err e
 func retrySingleReturn(attempts int, sleep int, f func() error) (err error) {
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			fmt.Println("retrying after error:", err)
 			time.Sleep(time.Duration(sleep) * time.Second)
 			sleep *= 2
 		}
@@ -310,9 +306,9 @@ func retrySingleReturn(attempts int, sleep int, f func() error) (err error) {
 		if err == nil {
 			return nil
 		}
-		err, ok := err.(porkbun.StatusError)
+		err, ok := err.(porkbun.ServerError)
 		if ok {
-			if !isRetryable(err.Status) {
+			if !isRetryable(err.StatusCode) {
 				return fmt.Errorf("received error is not retryable: %s", err)
 			}
 		}
@@ -328,6 +324,6 @@ func (r porkbunDnsRecordResource) getRecords(ctx context.Context, domain string)
 	return records, nil
 }
 
-func isRetryable(status string) bool {
+func isRetryable(status int) bool {
 	return slices.Contains(retryableCodes, status)
 }
