@@ -146,7 +146,6 @@ func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.Creat
 func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data porkbunDnsRecordResourceData
 	attempts := r.provider.MaxRetries
-	tflog.Info(ctx, fmt.Sprintf("Max Retries set to: %d", r.provider.MaxRetries))
 
 	diags := req.State.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)

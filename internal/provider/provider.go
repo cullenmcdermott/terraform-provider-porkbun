@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/nrdcg/porkbun"
 )
 
@@ -97,8 +96,6 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 	if baseUrl, ok := os.LookupEnv("PORKBUN_BASE_URL"); ok {
 		c.BaseURL, _ = url.Parse(baseUrl)
 	}
-
-	tflog.Info(ctx, fmt.Sprintf("in provider max retries is %d", data.MaxRetries.Value))
 
 	if data.MaxRetries.Null {
 		if mr, ok := os.LookupEnv("PORKBUN_MAX_RETRIES"); ok {
