@@ -3,9 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
-
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -14,12 +11,24 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/nrdcg/porkbun"
+	"golang.org/x/exp/slices"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
 var _ provider.ResourceType = porkbunDnsRecordResourceType{}
 var _ resource.Resource = porkbunDnsRecordResource{}
 var _ resource.ResourceWithImportState = porkbunDnsRecordResource{}
+
+// The API returns a string of "SUCCESS" or "ERROR" except for when we're rate limited
+// We get a 503 and the go library expects a string so we need to treat this as a string for now
+var retryableCodes = []int{503}
+
+var (
+	sleep = 10
+)
 
 type porkbunDnsRecordResourceType struct{}
 
@@ -102,6 +111,7 @@ type porkbunDnsRecordResource struct {
 
 func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data porkbunDnsRecordResourceData
+	attempts := r.provider.MaxRetries
 
 	diags := req.Config.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -119,7 +129,7 @@ func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.Creat
 		Notes:   data.Notes.Value, // Not documented
 	}
 
-	id, err := r.provider.client.CreateRecord(ctx, data.Domain.Value, record)
+	id, err := retry(attempts, sleep, func() (int, error) { return r.provider.client.CreateRecord(ctx, data.Domain.Value, record) })
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error creating DNS Record",
@@ -135,6 +145,7 @@ func (r porkbunDnsRecordResource) Create(ctx context.Context, req resource.Creat
 
 func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data porkbunDnsRecordResourceData
+	attempts := r.provider.MaxRetries
 
 	diags := req.State.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
@@ -143,15 +154,20 @@ func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
-	records, err := r.provider.client.RetrieveRecords(ctx, data.Domain.Value)
+	getRecordsResult, err := retry(attempts, sleep, func() ([]porkbun.Record, error) { return r.getRecords(ctx, data.Domain.Value) })
+
 	if err != nil {
 		resp.Diagnostics.AddError(
-			fmt.Sprintf("Could not retrieve records for %s", data.Domain.Value),
-			fmt.Sprintf("Error: %s", err),
+			fmt.Sprintf(
+				`Could not retrieve records for %s.`,
+				data.Domain.Value,
+			),
+			fmt.Sprintf("Error: %s", err.Error()),
 		)
 	}
-	tflog.Info(ctx, fmt.Sprintf("Found records: %s", records))
-	for _, record := range records {
+
+	tflog.Info(ctx, fmt.Sprintf("Found records: %s", getRecordsResult))
+	for _, record := range getRecordsResult {
 		tflog.Info(ctx, fmt.Sprintf("This record is: %s", record.ID))
 		if record.ID == data.Id.Value {
 			data.Content.Value = record.Content
@@ -177,6 +193,7 @@ func (r porkbunDnsRecordResource) Read(ctx context.Context, req resource.ReadReq
 func (r porkbunDnsRecordResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var data porkbunDnsRecordResourceData
 	var recordId string
+	attempts := r.provider.MaxRetries
 
 	diags := req.Plan.Get(ctx, &data)
 	req.State.GetAttribute(ctx, path.Root("id"), &recordId)
@@ -203,7 +220,7 @@ func (r porkbunDnsRecordResource) Update(ctx context.Context, req resource.Updat
 		)
 	}
 
-	err = r.provider.client.EditRecord(ctx, data.Domain.Value, intId, record)
+	err = retrySingleReturn(attempts, sleep, func() error { return r.provider.client.EditRecord(ctx, data.Domain.Value, intId, record) })
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error updating the record",
@@ -222,8 +239,7 @@ func (r porkbunDnsRecordResource) Update(ctx context.Context, req resource.Updat
 
 func (r porkbunDnsRecordResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var state porkbunDnsRecordResourceData
-
-	//var data exampleResourceData
+	attempts := r.provider.MaxRetries
 
 	diags := req.State.Get(ctx, &state)
 	resp.Diagnostics.Append(diags...)
@@ -240,7 +256,7 @@ func (r porkbunDnsRecordResource) Delete(ctx context.Context, req resource.Delet
 		)
 	}
 
-	err = r.provider.client.DeleteRecord(ctx, state.Domain.Value, intId)
+	err = retrySingleReturn(attempts, sleep, func() error { return r.provider.client.DeleteRecord(ctx, state.Domain.Value, intId) })
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error deleting record",
@@ -255,4 +271,63 @@ func (r porkbunDnsRecordResource) Delete(ctx context.Context, req resource.Delet
 
 func (r porkbunDnsRecordResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// Originally from https://stackoverflow.com/questions/67069723/keep-retrying-a-function-in-golang
+func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err error) {
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			time.Sleep(time.Duration(sleep) * time.Second)
+			sleep *= 2
+		}
+		result, err = f()
+		if err == nil {
+			return result, nil
+		}
+		status, ok := err.(porkbun.Status)
+		if ok {
+			if status.Status != "SUCCESS" {
+				return result, fmt.Errorf("cannot be retried: %s", status.Error())
+			}
+		}
+		servererr, ok := err.(porkbun.ServerError)
+		if ok {
+			if !isRetryable(servererr.StatusCode) {
+				return result, fmt.Errorf("received error is not retryable: %s", servererr.Error())
+			}
+		}
+	}
+	return result, fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+}
+
+func retrySingleReturn(attempts int, sleep int, f func() error) (err error) {
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			time.Sleep(time.Duration(sleep) * time.Second)
+			sleep *= 2
+		}
+		err = f()
+		if err == nil {
+			return nil
+		}
+		err, ok := err.(porkbun.ServerError)
+		if ok {
+			if !isRetryable(err.StatusCode) {
+				return fmt.Errorf("received error is not retryable: %s", err)
+			}
+		}
+	}
+	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
+}
+
+func (r porkbunDnsRecordResource) getRecords(ctx context.Context, domain string) ([]porkbun.Record, error) {
+	records, err := r.provider.client.RetrieveRecords(ctx, domain)
+	if err != nil {
+		return []porkbun.Record{}, err
+	}
+	return records, nil
+}
+
+func isRetryable(status int) bool {
+	return slices.Contains(retryableCodes, status)
 }

@@ -1,6 +1,6 @@
 module github.com/cullenmcdermott/terraform-provider-porkbun
 
-go 1.18
+go 1.19
 
 require (
 	github.com/hashicorp/terraform-plugin-docs v0.13.0
@@ -8,8 +8,9 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.14.0
 	github.com/hashicorp/terraform-plugin-log v0.7.0
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.21.0
-	github.com/nrdcg/porkbun v0.1.1
-	github.com/stretchr/testify v1.7.2
+	github.com/nrdcg/porkbun v0.2.0
+	github.com/stretchr/testify v1.8.1
+	golang.org/x/exp v0.0.0-20221230162634-c8adb6e14cba
 )
 
 require (
@@ -64,7 +65,7 @@ require (
 	github.com/zclconf/go-cty v1.10.0 // indirect
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2 // indirect
-	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
 	google.golang.org/genproto v0.0.0-20200904004341-0bd0a958aa1d // indirect

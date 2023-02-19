@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -20,13 +21,15 @@ type porkbunProvider struct {
 	client     *porkbun.Client
 	configured bool
 	version    string
+	MaxRetries int
 }
 
 // providerData can be used to store data from the Terraform configuration.
 type providerData struct {
-	ApiKey    types.String `tfsdk:"api_key"`
-	SecretKey types.String `tfsdk:"secret_key"`
-	BaseUrl   types.String `tfsdk:"base_url"`
+	ApiKey     types.String `tfsdk:"api_key"`
+	SecretKey  types.String `tfsdk:"secret_key"`
+	BaseUrl    types.String `tfsdk:"base_url"`
+	MaxRetries types.Int64  `tfsdk:"max_retries"`
 }
 
 func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
@@ -94,6 +97,23 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		c.BaseURL, _ = url.Parse(baseUrl)
 	}
 
+	if data.MaxRetries.Null {
+		if mr, ok := os.LookupEnv("PORKBUN_MAX_RETRIES"); ok {
+			mri, err := strconv.Atoi(mr)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"failed converting max retries",
+					err.Error(),
+				)
+			}
+			p.MaxRetries = mri
+		} else {
+			p.MaxRetries = 10
+		}
+	} else {
+		p.MaxRetries = int(data.MaxRetries.Value)
+	}
+
 	p.client = c
 	p.configured = true
 }
@@ -128,6 +148,12 @@ func (p *porkbunProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Dia
 				Required:            false,
 				Optional:            true,
 				Type:                types.StringType,
+			},
+			"max_retries": {
+				MarkdownDescription: "Should only be changed if needing to work around Porkbun API rate limits",
+				Required:            false,
+				Optional:            true,
+				Type:                types.Int64Type,
 			},
 		},
 	}, nil

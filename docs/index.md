@@ -19,4 +19,5 @@ description: |-
 
 - `api_key` (String) API Key for Porkbun
 - `base_url` (String) Override Porkbun Base URL
+- `max_retries` (Number) Should only be changed if needing to work around Porkbun API rate limits
 - `secret_key` (String) Secret Key for Porkbun
