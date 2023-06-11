@@ -52,12 +52,15 @@ jobs:
     timeout-minutes: 15
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
-        # list whatever Terraform versions here you would like to support
         terraform:
           - '1.0.*'
           - '1.1.*'
           - '1.2.*'
+          - '1.3.*'
+          - '1.4.*'
+          - '1.5.*'
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
@@ -69,7 +72,13 @@ jobs:
           terraform_version: ${{ matrix.terraform }}
           terraform_wrapper: false
       - run: go mod download
-      - env:
+      - uses: nick-fields/retry@v2
+        env:
           TF_ACC: "1"
-        run: go test -v -cover ./internal/provider/
-        timeout-minutes: 10
+          PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
+          PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
+        with:
+          timeout_minutes: 10
+          max_attempts: 5
+          shell: sh
+          command: go test -v -cover ./internal/provider/

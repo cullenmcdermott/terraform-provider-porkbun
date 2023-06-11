@@ -3,12 +3,12 @@
 page_title: "porkbun_dns_record Resource - terraform-provider-porkbun"
 subcategory: ""
 description: |-
-  Example resource
+  Porkbun DNS Record resource
 ---
 
 # porkbun_dns_record (Resource)
 
-Example resource
+Porkbun DNS Record resource
 
 
 
@@ -18,12 +18,12 @@ Example resource
 ### Required
 
 - `domain` (String) The base domain to to create the record on
-- `name` (String) The subdomain for the record itself without the base domain
 - `type` (String) The type of DNS Record to create
 
 ### Optional
 
 - `content` (String) The content of the record
+- `name` (String) The subdomain for the record itself without the base domain
 - `notes` (String) Notes to add to the record
 - `prio` (String) The priority of the record
 - `ttl` (String) The ttl of the record, the minimum  is 600

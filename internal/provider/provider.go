@@ -7,9 +7,12 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
-	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
+	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/nrdcg/porkbun"
 )
@@ -25,15 +28,24 @@ type porkbunProvider struct {
 }
 
 // providerData can be used to store data from the Terraform configuration.
-type providerData struct {
+type PorkbunProviderModel struct {
 	ApiKey     types.String `tfsdk:"api_key"`
 	SecretKey  types.String `tfsdk:"secret_key"`
 	BaseUrl    types.String `tfsdk:"base_url"`
 	MaxRetries types.Int64  `tfsdk:"max_retries"`
 }
 
+func (p *porkbunProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+	resp.TypeName = "porkbun"
+	resp.Version = p.version
+}
+
+func (p *porkbunProvider) Datasources(ctx context.Context) []func() datasource.DataSource {
+	return []func() datasource.DataSource{}
+}
+
 func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data providerData
+	var data PorkbunProviderModel
 	diags := req.Config.Get(ctx, &data)
 	resp.Diagnostics.Append(diags...)
 
@@ -42,7 +54,7 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 	}
 
 	var apiKey string
-	if data.ApiKey.Unknown {
+	if data.ApiKey.IsUnknown() {
 		// Cannot connect to client with an unknown value
 		resp.Diagnostics.AddWarning(
 			"Unable to create client",
@@ -51,10 +63,10 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
-	if data.ApiKey.Null {
+	if data.ApiKey.IsNull() {
 		apiKey = os.Getenv("PORKBUN_API_KEY")
 	} else {
-		apiKey = data.ApiKey.Value
+		apiKey = data.ApiKey.String()
 	}
 
 	if apiKey == "" {
@@ -67,7 +79,7 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 	}
 
 	var secretKey string
-	if data.SecretKey.Unknown {
+	if data.SecretKey.IsUnknown() {
 		// Cannot connect to client with an unknown value
 		resp.Diagnostics.AddWarning(
 			"Unable to create client",
@@ -76,10 +88,10 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
-	if data.SecretKey.Null {
+	if data.SecretKey.IsNull() {
 		secretKey = os.Getenv("PORKBUN_SECRET_KEY")
 	} else {
-		secretKey = data.SecretKey.Value
+		secretKey = data.SecretKey.String()
 	}
 
 	if secretKey == "" {
@@ -97,7 +109,7 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		c.BaseURL, _ = url.Parse(baseUrl)
 	}
 
-	if data.MaxRetries.Null {
+	if data.MaxRetries.IsNull() {
 		if mr, ok := os.LookupEnv("PORKBUN_MAX_RETRIES"); ok {
 			mri, err := strconv.Atoi(mr)
 			if err != nil {
@@ -111,52 +123,53 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 			p.MaxRetries = 10
 		}
 	} else {
-		p.MaxRetries = int(data.MaxRetries.Value)
+		p.MaxRetries = int(data.MaxRetries.ValueInt64())
 	}
 
-	p.client = c
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = p.MaxRetries
+	c.HTTPClient = retryClient.StandardClient()
+
 	p.configured = true
+	resp.DataSourceData = c
+	resp.ResourceData = c
 }
 
-func (p *porkbunProvider) GetResources(ctx context.Context) (map[string]provider.ResourceType, diag.Diagnostics) {
-	return map[string]provider.ResourceType{
-		"porkbun_dns_record": porkbunDnsRecordResourceType{},
-	}, nil
+func (p *porkbunProvider) Resources(ctx context.Context) []func() resource.Resource {
+	return []func() resource.Resource{
+		NewPorkbunDnsRecordResource,
+	}
 }
 
-func (p *porkbunProvider) GetDataSources(ctx context.Context) (map[string]provider.DataSourceType, diag.Diagnostics) {
-	return map[string]provider.DataSourceType{}, nil
+func (p *porkbunProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+	return []func() datasource.DataSource{}
 }
 
-func (p *porkbunProvider) GetSchema(ctx context.Context) (tfsdk.Schema, diag.Diagnostics) {
-	return tfsdk.Schema{
-		Attributes: map[string]tfsdk.Attribute{
-			"api_key": {
+func (p *porkbunProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"api_key": schema.StringAttribute{
 				MarkdownDescription: "API Key for Porkbun",
 				Required:            false,
 				Optional:            true,
-				Type:                types.StringType,
 			},
-			"secret_key": {
+			"secret_key": schema.StringAttribute{
 				MarkdownDescription: "Secret Key for Porkbun",
 				Required:            false,
 				Optional:            true,
-				Type:                types.StringType,
 			},
-			"base_url": {
+			"base_url": schema.StringAttribute{
 				MarkdownDescription: "Override Porkbun Base URL",
 				Required:            false,
 				Optional:            true,
-				Type:                types.StringType,
 			},
-			"max_retries": {
+			"max_retries": schema.Int64Attribute{
 				MarkdownDescription: "Should only be changed if needing to work around Porkbun API rate limits",
 				Required:            false,
 				Optional:            true,
-				Type:                types.Int64Type,
 			},
 		},
-	}, nil
+	}
 }
 
 func New(version string) func() provider.Provider {

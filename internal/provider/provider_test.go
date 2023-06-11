@@ -19,6 +19,10 @@ func newPorkbunProvider(testUrl string) provider.Provider {
 	}
 }
 
+var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
+	"porkbun": providerserver.NewProtocol6WithError(New("test")()),
+}
+
 func protoV6ProviderFactories(url string) map[string]func() (tfprotov6.ProviderServer, error) {
 	return map[string]func() (tfprotov6.ProviderServer, error){
 		"porkbun": providerserver.NewProtocol6WithError(newPorkbunProvider(url)),

@@ -19,29 +19,26 @@ import (
 // can be customized.
 //go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
 
-var (
-	// these will be set by the goreleaser configuration
-	// to appropriate values for the compiled binary
-	version string = "dev"
-
-	// goreleaser can also pass the specific commit if you want
-	// commit  string = ""
-)
+// these will be set by the goreleaser configuration
+// to appropriate values for the compiled binary
+var version string = "dev" // goreleaser can also pass the specific commit if you want
+// commit  string = ""
 
 func main() {
 	var debug bool
 
 	flag.BoolVar(&debug, "debug", false, "set to true to run the provider with support for debuggers like delve")
 	flag.Parse()
+	flag.Set("logtostderr", "true")
 
 	opts := providerserver.ServeOpts{
 		// TODO: Update this string with the published name of your provider.
-		Address: "registry.terraform.io/cullenmcdermott/porkbun",
-		Debug:   debug,
+		Address:         "registry.terraform.io/cullenmcdermott/porkbun",
+		Debug:           debug,
+		ProtocolVersion: 6,
 	}
 
 	err := providerserver.Serve(context.Background(), provider.New(version), opts)
-
 	if err != nil {
 		log.Fatal(err.Error())
 	}
