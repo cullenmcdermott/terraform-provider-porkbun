@@ -3,6 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -12,9 +16,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/nrdcg/porkbun"
 	"golang.org/x/exp/slices"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces
@@ -290,7 +291,7 @@ func retry[T any](attempts int, sleep int, f func() (T, error)) (result T, err e
 				return result, fmt.Errorf("cannot be retried: %s", status.Error())
 			}
 		}
-		servererr, ok := err.(porkbun.ServerError)
+		servererr, ok := err.(*porkbun.ServerError)
 		if ok {
 			if !isRetryable(servererr.StatusCode) {
 				return result, fmt.Errorf("received error is not retryable: %s", servererr.Error())
@@ -310,7 +311,7 @@ func retrySingleReturn(attempts int, sleep int, f func() error) (err error) {
 		if err == nil {
 			return nil
 		}
-		err, ok := err.(porkbun.ServerError)
+		err, ok := err.(*porkbun.ServerError)
 		if ok {
 			if !isRetryable(err.StatusCode) {
 				return fmt.Errorf("received error is not retryable: %s", err)
