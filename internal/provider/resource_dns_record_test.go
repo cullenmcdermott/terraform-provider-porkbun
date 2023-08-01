@@ -1,242 +1,96 @@
 package provider
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"os"
+	"fmt"
 	"testing"
+  "math/rand"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/nrdcg/porkbun"
-	"github.com/stretchr/testify/require"
 )
 
-type porkbunTestProvider struct {
-	client     *porkbun.Client
-	configured bool
-	version    string
-}
-
-type Client struct {
-	secretApiKey string
-	apiKey       string
-	BaseURL      *url.URL
-	HTTPClient   *http.Client
-}
-
-type createResponse struct {
-	Status string
-	ID     int
-}
-
-type deleteResponse struct {
-	Status string
-}
-
-type retrieveResponse struct {
-	Status  string
-	Records []porkbun.Record
-}
-
-func Test_CreateRecordSuccess(t *testing.T) {
-	testUrl, expectRequest, _ := MockPorkbun(t)
-	os.Setenv("PORKBUN_API_KEY", "pk1_foobarbaz")
-	os.Setenv("PORKBUN_SECRET_KEY", "sk1_foobarbaz")
-	os.Setenv("PORKBUN_BASE_URL", testUrl)
-	os.Setenv("PORKBUN_MAX_RETRIES", "1")
-
-	tests := []struct {
-		name         string
-		testResource string
-		record       porkbun.Record
-	}{
-		{
-			name: "withSubdomain",
-			testResource: `
-          resource "porkbun_dns_record" "test" {
-            name =   "test"
-            domain = "foobar.dev"
-            content = "0.0.0.1"
-            type = "A"
-          }
-				`,
-			record: porkbun.Record{
-				Name:    "test",
-				ID:      "987",
-				Type:    "A",
-				Content: "0.0.0.1",
-				TTL:     "600",
-				Prio:    "",
-				Notes:   "",
+func Test_CreateRecordWithSubdomainSuccess(t *testing.T) {
+  lastOctet := randomOctet()
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testRecordConfigWithSubdomain(lastOctet),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", fmt.Sprintf("0.0.0.%v", lastOctet)),
+					resource.TestCheckResourceAttr("porkbun_dns_record.test", "name", fmt.Sprintf("%v-foo", lastOctet)),
+				),
 			},
 		},
-		{
-			name: "withoutSubdomain",
-			testResource: `
-          resource "porkbun_dns_record" "test" {
-            name = ""
-            domain = "foobar.dev"
-            content = "0.0.0.1"
-            type = "A"
-          }
-				`,
-			record: porkbun.Record{
-				Name:    "foobar.dev",
-				ID:      "987",
-				Type:    "A",
-				Content: "0.0.0.1",
-				TTL:     "600",
-				Prio:    "",
-				Notes:   "",
-			},
-		},
-	}
-	for _, test := range tests {
-
-		t.Log("Running test ", test.name)
-		r := require.New(t)
-		expectRequest(func(w http.ResponseWriter, req *http.Request) {
-			r.Equal(http.MethodPost, req.Method)
-			r.Equal("/dns/create/foobar.dev", req.URL.Path)
-			r.NoError(json.NewEncoder(w).Encode(&createResponse{
-				Status: "SUCCESS",
-				ID:     987,
-			}))
-		})
-
-		for range []int{1, 2, 3} {
-			expectRequest(func(w http.ResponseWriter, req *http.Request) {
-				r.Equal(http.MethodPost, req.Method)
-				r.Equal("/dns/retrieve/foobar.dev", req.URL.Path)
-				r.NoError(json.NewEncoder(w).Encode(&retrieveResponse{
-					Status:  "SUCCESS",
-					Records: []porkbun.Record{test.record},
-				}))
-			})
-
-		}
-
-		expectRequest(func(w http.ResponseWriter, req *http.Request) {
-			r.Equal(http.MethodPost, req.Method)
-			r.Equal("/dns/delete/foobar.dev/987", req.URL.Path)
-			r.NoError(json.NewEncoder(w).Encode(&deleteResponse{
-				Status: "SUCCESS",
-			}))
-		})
-		// Run the terraform twice to ensure its idempotent
-		resource.UnitTest(t, resource.TestCase{
-			IsUnitTest: true,
-			Steps: []resource.TestStep{
-				{
-					ProtoV6ProviderFactories: protoV6ProviderFactories(testUrl),
-					Config:                   test.testResource,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", test.record.Content),
-					),
-				},
-				{
-					ProtoV6ProviderFactories: protoV6ProviderFactories(testUrl),
-					Config:                   test.testResource,
-					Check: resource.ComposeTestCheckFunc(
-						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", test.record.Content),
-					),
-				},
-			},
-		})
-	}
+	})
 }
 
-//func Test_CreateRecordFailure(t *testing.T) {
-//	testUrl, expectRequest, _ := MockPorkbun(t)
-//	os.Setenv("PORKBUN_API_KEY", "pk1_foobarbaz")
-//	os.Setenv("PORKBUN_SECRET_KEY", "sk1_foobarbaz")
-//	os.Setenv("PORKBUN_BASE_URL", testUrl)
-//
-//	tests := []struct {
-//		name         string
-//		testResource string
-//		record       porkbun.Record
-//	}{
-//		{
-//			name: "withSubdomain",
-//			testResource: `
-//          resource "porkbun_dns_record" "test" {
-//            name =   "test"
-//            domain = "foobar.dev"
-//            content = "0.0.0.1"
-//            type = "A"
-//          }
-//				`,
-//			record: porkbun.Record{},
-//		},
-//	}
-//	for _, test := range tests {
-//		r := require.New(t)
-//		expectRequest(func(w http.ResponseWriter, req *http.Request) {
-//			r.Equal(http.MethodPost, req.Method)
-//			r.Equal("/dns/delete/foobar.dev/0", req.URL.Path)
-//			r.Error(json.NewEncoder(w).Encode(&createResponse{
-//				Status: "FAILURE",
-//			}))
-//		})
-//		expectRequest(func(w http.ResponseWriter, req *http.Request) {
-//			r.Equal(http.MethodPost, req.Method)
-//			r.Equal("/dns/delete/foobar.dev/0", req.URL.Path)
-//			r.Error(json.NewEncoder(w).Encode(&createResponse{
-//				Status: "FAILURE",
-//			}))
-//		})
-//		// Run the terraform twice to ensure its idempotent
-//		resource.UnitTest(t, resource.TestCase{
-//			IsUnitTest: true,
-//			Steps: []resource.TestStep{
-//				{
-//					ProtoV6ProviderFactories: protoV6ProviderFactories(testUrl),
-//					Config:                   test.testResource,
-//					Check: resource.ComposeTestCheckFunc(
-//						resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", "0.0.0.1"),
-//					),
-//				},
+func Test_CreateRecordWithoutSubdomainSuccess(t *testing.T) {
+  lastOctet := randomOctet()
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testRecordConfigNoSubdomain(lastOctet),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", fmt.Sprintf("0.0.0.%v", lastOctet)),
+					resource.TestCheckResourceAttr("porkbun_dns_record.test", "name", ""),
+				),
+			},
+		},
+	})
+}
+
+//func Test_CreateRecordWithRetriesSuccess(t *testing.T) {
+//  lastOctet := randomOctet()
+//	resource.Test(t, resource.TestCase{
+//		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+//		Steps: []resource.TestStep{
+//			{
+//				Config: testRecordWithRetries(lastOctet),
+//				Check: resource.ComposeAggregateTestCheckFunc(
+//					resource.TestCheckResourceAttr("porkbun_dns_record.test[0]", "content", fmt.Sprintf("0.0.0.%v", lastOctet)),
+//					resource.TestCheckResourceAttr("porkbun_dns_record.test[0]", "name", fmt.Sprintf("%v-foo-0", lastOctet)),
+//				),
 //			},
-//		})
-//	}
-//
+//		},
+//	})
 //}
 
-func MockPorkbun(t *testing.T) (string, func(http.HandlerFunc), func()) {
-	var (
-		receivedCalls   int
-		expectedCalls   []http.HandlerFunc
-		addExpectedCall = func(h http.HandlerFunc) {
-			expectedCalls = append(expectedCalls, h)
-		}
-		r = require.New(t)
-	)
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		r.Less(
-			receivedCalls,
-			len(expectedCalls),
-			"did not expect another request",
-		)
-
-		expectedCalls[receivedCalls](w, req)
-
-		receivedCalls++
-	}))
-
-	return ts.URL, addExpectedCall, func() {
-		ts.Close()
-		r.Equal(
-			len(expectedCalls),
-			receivedCalls,
-			"expected one more request",
-		)
-	}
+func testRecordConfigNoSubdomain(randomIp int) string {
+	return fmt.Sprintf(`
+resource "porkbun_dns_record" "test" {
+  name = ""
+  domain = "providertest.top"
+  content = "0.0.0.%v"
+  type = "A"
+}
+`, randomIp)
 }
 
-type TestHttpMock struct {
-	server *httptest.Server
+func testRecordConfigWithSubdomain(randomIp int) string {
+	return fmt.Sprintf(`
+resource "porkbun_dns_record" "test" {
+  name = "%v-foo"
+  domain = "providertest.top"
+  content = "0.0.0.%v"
+  type = "A"
+}
+`, randomIp, randomIp)
+}
+
+func testRecordWithRetries(randomIp int) string {
+	return fmt.Sprintf(`
+resource "porkbun_dns_record" "test" {
+  count = 1
+  name = "%v-foo-${count.index}"
+  domain = "providertest.top"
+  content = "0.0.0.%v"
+  type = "A"
+}
+`, randomIp, randomIp)
+}
+
+func randomOctet() int {
+  return rand.Intn(255 - 0) + 0 
 }
