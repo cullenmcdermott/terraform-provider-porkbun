@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/nrdcg/porkbun"
@@ -56,16 +57,15 @@ func (r *porkbunDnsRecordResource) Schema(ctx context.Context, req resource.Sche
 
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
+				Computed:            true,
+				Optional:            true,
 				MarkdownDescription: "The subdomain for the record itself without the base domain",
-				// Todo: If this is unset it shows a change all the time?
-				// But it seems fine if its explicitly set to ""
-				Optional: true,
+				Default:             stringdefault.StaticString(""),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplaceIfConfigured(),
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			// Changing should force recreation
 			"domain": schema.StringAttribute{
 				Required:            true,
 				MarkdownDescription: "The base domain to to create the record on",
@@ -90,6 +90,9 @@ func (r *porkbunDnsRecordResource) Schema(ctx context.Context, req resource.Sche
 				Default:             stringdefault.StaticString("600"),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+				},
+				Validators: []validator.String{
+					TtlAtLeast600(),
 				},
 			},
 			"type": schema.StringAttribute{

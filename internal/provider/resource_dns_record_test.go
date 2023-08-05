@@ -2,14 +2,14 @@ package provider
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
-  "math/rand"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 )
 
 func Test_CreateRecordWithSubdomainSuccess(t *testing.T) {
-  lastOctet := randomOctet()
+	lastOctet := randomOctet()
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -25,7 +25,7 @@ func Test_CreateRecordWithSubdomainSuccess(t *testing.T) {
 }
 
 func Test_CreateRecordWithoutSubdomainSuccess(t *testing.T) {
-  lastOctet := randomOctet()
+	lastOctet := randomOctet()
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -56,11 +56,9 @@ func Test_CreateRecordWithoutSubdomainSuccess(t *testing.T) {
 //	})
 //}
 
-
 func testRecordConfigNoSubdomain(randomIp int) string {
 	return fmt.Sprintf(`
 resource "porkbun_dns_record" "test" {
-  name = ""
   domain = "providertest.top"
   content = "0.0.0.%v"
   type = "A"
@@ -92,5 +90,5 @@ resource "porkbun_dns_record" "test" {
 }
 
 func randomOctet() int {
-  return rand.Intn(255 - 0) + 0 
+	return rand.Intn(255-0) + 0
 }
