@@ -63,10 +63,10 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
+	apiKey = data.ApiKey.ValueString()
+
 	if data.ApiKey.IsNull() {
 		apiKey = os.Getenv("PORKBUN_API_KEY")
-	} else {
-		apiKey = data.ApiKey.String()
 	}
 
 	if apiKey == "" {
@@ -88,10 +88,10 @@ func (p *porkbunProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
+	secretKey = data.SecretKey.ValueString()
+
 	if data.SecretKey.IsNull() {
 		secretKey = os.Getenv("PORKBUN_SECRET_KEY")
-	} else {
-		secretKey = data.SecretKey.String()
 	}
 
 	if secretKey == "" {
@@ -152,11 +152,13 @@ func (p *porkbunProvider) Schema(ctx context.Context, req provider.SchemaRequest
 				MarkdownDescription: "API Key for Porkbun",
 				Required:            false,
 				Optional:            true,
+				Sensitive:           true,
 			},
 			"secret_key": schema.StringAttribute{
 				MarkdownDescription: "Secret Key for Porkbun",
 				Required:            false,
 				Optional:            true,
+				Sensitive:           true,
 			},
 			"base_url": schema.StringAttribute{
 				MarkdownDescription: "Override Porkbun Base URL",
