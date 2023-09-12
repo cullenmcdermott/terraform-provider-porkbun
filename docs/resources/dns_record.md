@@ -31,5 +31,3 @@ Porkbun DNS Record resource
 ### Read-Only
 
 - `id` (String) The Porkbun ID of the Record
-
-
