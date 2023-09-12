@@ -7,9 +7,6 @@ on:
   pull_request:
     paths-ignore:
       - 'README.md'
-  push:
-    paths-ignore:
-      - 'README.md'
 
 # Testing only needs permissions to read the repository contents.
 permissions:
@@ -77,6 +74,8 @@ jobs:
           TF_ACC: "1"
           PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
           PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
+          TF_VAR_api_key: ${{ secrets.PORKBUN_API_KEY }}
+          TF_VAR_secret_key: ${{ secrets.PORKBUN_SECRET_KEY }}
         with:
           timeout_minutes: 10
           max_attempts: 5

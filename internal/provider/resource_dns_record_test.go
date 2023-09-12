@@ -40,21 +40,21 @@ func Test_CreateRecordWithoutSubdomainSuccess(t *testing.T) {
 	})
 }
 
-//func Test_CreateRecordWithRetriesSuccess(t *testing.T) {
-//  lastOctet := randomOctet()
-//	resource.Test(t, resource.TestCase{
-//		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-//		Steps: []resource.TestStep{
-//			{
-//				Config: testRecordWithRetries(lastOctet),
-//				Check: resource.ComposeAggregateTestCheckFunc(
-//					resource.TestCheckResourceAttr("porkbun_dns_record.test[0]", "content", fmt.Sprintf("0.0.0.%v", lastOctet)),
-//					resource.TestCheckResourceAttr("porkbun_dns_record.test[0]", "name", fmt.Sprintf("%v-foo-0", lastOctet)),
-//				),
-//			},
-//		},
-//	})
-//}
+func Test_CreateRecordSetProviderCredsWithVars(t *testing.T) {
+	lastOctet := randomOctet()
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testRecordSetProviderCredsWithVars(lastOctet),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("porkbun_dns_record.test", "content", fmt.Sprintf("0.0.0.%v", lastOctet)),
+					resource.TestCheckResourceAttr("porkbun_dns_record.test", "name", fmt.Sprintf("%v-foo", lastOctet)),
+				),
+			},
+		},
+	})
+}
 
 func testRecordConfigNoSubdomain(randomIp int) string {
 	return fmt.Sprintf(`
@@ -77,11 +77,18 @@ resource "porkbun_dns_record" "test" {
 `, randomIp, randomIp)
 }
 
-func testRecordWithRetries(randomIp int) string {
+func testRecordSetProviderCredsWithVars(randomIp int) string {
 	return fmt.Sprintf(`
+variable "api_key" {}
+variable "secret_key" {}
+
+provider "porkbun" {
+  api_key    = var.api_key
+  secret_key = var.secret_key
+}
+
 resource "porkbun_dns_record" "test" {
-  count = 1
-  name = "%v-foo-${count.index}"
+  name = "%v-foo"
   domain = "providertest.top"
   content = "0.0.0.%v"
   type = "A"
